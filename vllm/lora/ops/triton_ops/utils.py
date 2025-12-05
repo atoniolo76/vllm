@@ -291,5 +291,15 @@ def supports_pdl(device: torch.device | None = None) -> bool:
     """
     Refer to: https://github.com/triton-lang/triton/blob/v3.5.0/python/tutorials/11-programmatic-dependent-launch.py
     """
-    # PDL requires compute capability SM90 or above
-    return current_platform.is_cuda() and current_platform.has_device_capability(90)
+    # PDL requires compute capability SM90 or above, but SM100 (Blackwell)
+    # has a Triton compiler bug with gdc_wait predication in the pipeliner pass
+    if not current_platform.is_cuda():
+        return False
+    cap = current_platform.get_device_capability()
+    if cap is None:
+        return False
+    # Only enable for SM90-SM99 (Hopper), disable for SM100+ (Blackwell)
+    # until Triton fixes the pipeliner bug with inline asm predication
+    major, minor = cap
+    sm_version = major * 10 + minor
+    return 90 <= sm_version < 100

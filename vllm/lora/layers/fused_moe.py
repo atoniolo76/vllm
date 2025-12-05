@@ -102,10 +102,14 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
                 moe_intermediate_size=intermediate_size,  # lora_b_stacked.shape[-2],
             )
         else:  # fall back to the default config
+            # For compressed/quantized models, weights might be stored as packed tensors
+            # or might not have standard .size() method. Use logical sizes instead.
+            w13_shape = (layer.local_num_experts, layer.intermediate_size_per_partition * 2, layer.hidden_size)
+            w2_shape = (layer.local_num_experts, layer.hidden_size, layer.intermediate_size_per_partition)
             get_config_func = functools.partial(
                 try_get_optimal_moe_config,
-                layer.w13_weight.size(),
-                layer.w2_weight.size(),
+                w13_shape,
+                w2_shape,
                 top_k,
                 config_dtype,
                 block_shape=layer.quant_method.moe_quant_config.block_shape,
@@ -210,6 +214,8 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
                 expert_ids_lora = expert_ids_lora.view(self.max_loras, -1)
                 sorted_token_ids_lora = sorted_token_ids_lora.view(self.max_loras, -1)
                 #
+
+                # LoRA path is being executed
 
                 self.punica_wrapper.add_lora_fused_moe(
                     input.view(-1, top_k, input.shape[-1]),
